@@ -1,0 +1,49 @@
+
+
+services:
+  dimatech_pg_database:
+    image: postgres:14.0-alpine
+    container_name: dimatech_pg_database
+    restart: "${DOCKER_RESTART_POLICY:-unless-stopped}"
+    volumes:
+      - dimatech_pg_database_volume:/var/lib/postgresql/data/
+    ports:
+      - 5432:5432
+    env_file:
+      - ./.env
+    networks:
+      - dimatech_network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+
+
+  dimatech_integration:
+    image: dimatech_integration
+    restart: "${DOCKER_RESTART_POLICY:-unless-stopped}"
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dimatech_integration
+    ports:
+      - 8080:8080
+    depends_on:
+      - dimatech_pg_database
+    networks:
+      - dimatech_network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  dimatech_pg_database_volume:
+  logs:
+
+networks:
+  dimatech_network:
+    driver: bridge

@@ -135,7 +135,7 @@ celerybeat.pid
 *.sage.py
 
 # Environments
-.env
+# .env Убрал энв из гитигнора чтобы вы могли сбилдиться у себя
 .envrc
 .venv
 env/
