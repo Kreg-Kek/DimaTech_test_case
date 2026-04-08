@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, Numeric, UniqueConstraint
+from sqlalchemy import Column, Integer, String, ForeignKey, Numeric, Boolean, UniqueConstraint
 from sqlalchemy.orm import relationship
 from app.database import Base
 
@@ -7,6 +7,8 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True, nullable=False)
     full_name = Column(String, nullable=True)
+    password_hash = Column(String, nullable=False)
+    is_admin = Column(Boolean, default=False)
     accounts = relationship("Account", back_populates="user")
 
 class Admin(Base):
@@ -14,6 +16,8 @@ class Admin(Base):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True, nullable=False)
     full_name = Column(String, nullable=True)
+    password_hash = Column(String, nullable=False)
+    is_admin = Column(Boolean, default=True)
 
 class Account(Base):
     __tablename__ = "accounts"

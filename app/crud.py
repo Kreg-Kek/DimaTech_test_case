@@ -2,6 +2,7 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from decimal import Decimal
 from app import models, schemas
+from sqlalchemy.ext.asyncio import AsyncSession
 
 async def create_user(db, user_in: schemas.UserCreate):
     user = models.User(email=user_in.email, full_name=user_in.full_name)
@@ -47,3 +48,71 @@ async def create_payment_and_apply(db, payment_in: schemas.PaymentCreate):
     db.add(account)
     await db.flush()
     return payment
+
+# --- users/admin helpers ---
+async def get_user_by_email(db: AsyncSession, email: str):
+    q = await db.execute(select(models.User).where(models.User.email == email))
+    return q.scalars().first()
+
+async def create_user(db: AsyncSession, user_in: schemas.UserCreate):
+    user = models.User(email=user_in.email, full_name=user_in.full_name, password_hash=user_in.password, is_admin=False)
+    # password_hash should be already hashed by caller
+    db.add(user)
+    await db.flush()
+    return user
+
+async def update_user(db: AsyncSession, user_id: int, **fields):
+    q = await db.execute(select(models.User).where(models.User.id == user_id))
+    user = q.scalars().first()
+    if not user:
+        return None
+    for k, v in fields.items():
+        setattr(user, k, v)
+    db.add(user)
+    await db.flush()
+    return user
+
+async def delete_user(db: AsyncSession, user_id: int):
+    q = await db.execute(select(models.User).where(models.User.id == user_id))
+    user = q.scalars().first()
+    if not user:
+        return False
+    await db.delete(user)
+    await db.flush()
+    return True
+
+async def list_users(db: AsyncSession, limit: int=100, offset: int=0):
+    q = await db.execute(select(models.User).limit(limit).offset(offset))
+    return q.scalars().all()
+
+# accounts/payments by user
+async def get_accounts_by_user(db: AsyncSession, user_id: int):
+    q = await db.execute(select(models.Account).where(models.Account.user_id == user_id))
+    return q.scalars().all()
+
+async def get_payments_by_user(db: AsyncSession, user_id: int):
+    q = await db.execute(
+        select(models.Payment).join(models.Account).where(models.Account.user_id == user_id)
+    )
+    return q.scalars().all()
+
+# authentication helper: check credentials
+async def authenticate_user(db: AsyncSession, email: str, plain_password: str, verify_fn):
+    user = await get_user_by_email(db, email)
+    if not user:
+        # try admin table
+        q = await db.execute(select(models.Admin).where(models.Admin.email == email))
+        admin = q.scalars().first()
+        if not admin:
+            return None
+        if verify_fn(plain_password, admin.password_hash):
+            return {"type": "admin", "obj": admin}
+        return None
+    if verify_fn(plain_password, user.password_hash):
+        return {"type": "user", "obj": user}
+    return None
+
+# helper to get accounts with balances for many users (admin requirement)
+async def get_accounts_for_users(db: AsyncSession, user_ids: list[int]):
+    q = await db.execute(select(models.Account).where(models.Account.user_id.in_(user_ids)))
+    return q.scalars().all()

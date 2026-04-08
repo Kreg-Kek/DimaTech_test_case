@@ -1,19 +1,22 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.deps import get_current_user, get_db
 from app import schemas, crud
-from app.database import get_session
 
 router = APIRouter(prefix="/users", tags=["users"])
 
-@router.post("/", response_model=schemas.UserRead, status_code=status.HTTP_201_CREATED)
-async def create_user(user_in: schemas.UserCreate, db: AsyncSession = Depends(get_session)):
-    user = await crud.create_user(db, user_in)
-    await db.commit()
-    return user
+@router.get("/me", response_model=schemas.UserRead)
+async def read_own_profile(current = Depends(get_current_user)):
+    return current["user"]
 
-@router.get("/{user_id}", response_model=schemas.UserRead)
-async def read_user(user_id: int, db: AsyncSession = Depends(get_session)):
-    user = await crud.get_user(db, user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    return user
+@router.get("/me/accounts", response_model=list[schemas.AccountRead])
+async def list_my_accounts(current = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    user = current["user"]
+    accounts = await crud.get_accounts_by_user(db, user.id)
+    return accounts
+
+@router.get("/me/payments", response_model=list[schemas.PaymentRead])
+async def list_my_payments(current = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    user = current["user"]
+    payments = await crud.get_payments_by_user(db, user.id)
+    return payments
