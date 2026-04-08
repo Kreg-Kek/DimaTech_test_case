@@ -1,137 +1,49 @@
-import logging
-import traceback
+from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
+from decimal import Decimal
+from app import models, schemas
 
-from datetime import datetime as dt
-from sqlalchemy import update, delete
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
+async def create_user(db, user_in: schemas.UserCreate):
+    user = models.User(email=user_in.email, full_name=user_in.full_name)
+    db.add(user)
+    await db.flush()
+    return user
 
-from app.models import KLInfo, Reestr
-from app.schemas import KLSchema, ReestrSchema, ResultForDeleteSchema
+async def get_user(db, user_id: int):
+    q = await db.execute(select(models.User).where(models.User.id == user_id))
+    return q.scalars().first()
 
+async def create_admin(db, admin_in: schemas.AdminCreate):
+    admin = models.Admin(email=admin_in.email, full_name=admin_in.full_name)
+    db.add(admin)
+    await db.flush()
+    return admin
 
+async def create_account(db, account_in: schemas.AccountCreate):
+    account = models.Account(user_id=account_in.user_id, balance=Decimal("0.00"))
+    db.add(account)
+    await db.flush()
+    return account
 
-async def add_in_kl(
-    async_session: AsyncSession,
-    call_info_data: KLSchema,
-):
-    """Записать клиента в килл лист."""
+async def get_account(db, account_id: int):
+    q = await db.execute(select(models.Account).where(models.Account.id == account_id))
+    return q.scalars().first()
 
+async def create_payment_and_apply(db, payment_in: schemas.PaymentCreate):
+    # Atomically create payment and update account balance
+    payment = models.Payment(uid=payment_in.uid, account_id=payment_in.account_id, amount=payment_in.amount)
+    db.add(payment)
     try:
-        stmt = KLInfo(**call_info_data.model_dump(mode='python'))
-        async_session.add(stmt)
-        await async_session.commit()
-        return True
-    except Exception:
-        logging.warning(str(traceback.format_exc()))
-        return False
+        await db.flush()  # may raise IntegrityError on duplicate uid
+    except IntegrityError:
+        await db.rollback()
+        raise
 
-async def check_number_kl(
-    async_session: AsyncSession,
-    number: str
-):
-    """Получить запись из килл листа по number."""
-    try:
-        stmt = select(KLInfo).where(KLInfo.phone == number)
-        db_response = await async_session.execute(stmt)
-        call_info = db_response.scalars().first()  # Получаем первую запись или None
-        return call_info
-    except Exception:
-        logging.warning(str(traceback.format_exc()))
-        return False
-
-
-async def add_in_clients_list(
-    async_session: AsyncSession,
-    call_info_data: ReestrSchema,
-):
-    """Записать клиента в колл лист."""
-
-    try:
-        stmt = Reestr(**call_info_data.model_dump(mode='python'))
-        async_session.add(stmt)
-        await async_session.commit()
-        return True
-    except Exception:
-        logging.warning(str(traceback.format_exc()))
-        return False
-
-
-async def get_kill_list(
-        async_session: AsyncSession,
-        limit: int = 1000
-):
-    """Поулчаем записи в килл листе по лимиту. Дефолтный 1000 записей."""
-    try:
-        stmt = select(KLInfo).limit(limit)
-        db_reponse = await async_session.execute(stmt)
-        calls_info = db_reponse.scalars().all()
-        return calls_info
-    except Exception:
-        logging.warning(str(traceback.format_exc()))
-        return False
-    
-async def get_client_list(
-        async_session: AsyncSession,
-        limit: int = 1000
-):
-    """Поулчаем записи в реестре по лимиту. Дефолтный 1000 записей."""
-    try:
-        stmt = select(Reestr).limit(limit)
-        db_reponse = await async_session.execute(stmt)
-        clients = db_reponse.scalars().all()
-        return clients
-    except Exception:
-        logging.warning(str(traceback.format_exc()))
-        return False
-
-async def get_client(
-        async_session: AsyncSession,
-        number: str
-):
-    """Вытягиваем данные клиента по номеру"""
-    try:
-        stmt = select(Reestr).where(Reestr.bnpl_phone == number)  
-        db_response = await async_session.execute(stmt)
-        client = db_response.scalars().first()  
-        return client
-    except Exception as e:
-        logging.warning(str(traceback.format_exc()))
-        return False
-
-
-
-async def clear_data(async_session: AsyncSession):
-    """Полная очистка БД."""
-
-    await async_session.execute(delete(KLInfo))
-    await async_session.execute(delete(Reestr))
-    await async_session.commit()
-    logging.warning(f'На dimatech_web все БД очищенны')
-
-async def clear_3F(async_session: AsyncSession, person:ResultForDeleteSchema):
-    """Зачистка всех третьих лиц из килл листа и ежедневная очистка реестра"""
-    await async_session.execute(delete(KLInfo).where(KLInfo.contact_person == person.contact_person1))
-    await async_session.execute(delete(KLInfo).where(KLInfo.contact_person == person.contact_person2))
-    await async_session.execute(delete(Reestr))
-    await async_session.commit()
-    logging.warning('На dimatech_web успешная ежедневная очистка реестра')
-
-async def clear_only_person_from_KL(async_session: AsyncSession, person:ResultForDeleteSchema):
-    """Зачистка только килл листа по контакт персон"""
-    await async_session.execute(delete(KLInfo).where(KLInfo.contact_person == person.contact_person1))
-    await async_session.execute(delete(KLInfo).where(KLInfo.contact_person == person.contact_person2))
-    await async_session.commit()
-    logging.warning('На dimatech_web успешная очистка конкретного cantact_person из килл-листа')
-
-async def clear_only_reestr(async_session: AsyncSession):
-    """Полная очистка только реестра."""
-    await async_session.execute(delete(Reestr))
-    await async_session.commit()
-    logging.warning(f'На dimatech_web очищен только реестр')
-
-async def clear_only_kill_list(async_session: AsyncSession):
-    """Полная очистка только килл-листа."""
-    await async_session.execute(delete(KLInfo))
-    await async_session.commit()
-    logging.warning(f'На dimatech_web очищен только килл-лист')
+    q = await db.execute(select(models.Account).where(models.Account.id == payment_in.account_id).with_for_update())
+    account = q.scalars().first()
+    if account is None:
+        raise ValueError("Account not found")
+    account.balance += Decimal(payment_in.amount)
+    db.add(account)
+    await db.flush()
+    return payment
