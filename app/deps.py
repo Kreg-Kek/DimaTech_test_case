@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from jose import JWTError
 from app import schemas, crud
 from app.database import get_session
-from app.auth import decode_token
+from app.security import decode_token
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
 

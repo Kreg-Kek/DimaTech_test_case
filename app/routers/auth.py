@@ -3,7 +3,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi.security import OAuth2PasswordRequestForm
 from app import schemas, crud
 from app.database import get_session
-from app.auth import verify_password, hash_password, create_access_token
+from app.security import verify_password, hash_password, create_access_token
+import logging
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 

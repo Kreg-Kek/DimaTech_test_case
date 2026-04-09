@@ -3,34 +3,35 @@ from sqlalchemy.exc import IntegrityError
 from decimal import Decimal
 from app import models, schemas
 from sqlalchemy.ext.asyncio import AsyncSession
+from .security import hash_password
 
-async def create_user(db, user_in: schemas.UserCreate):
+async def create_user(db: AsyncSession, user_in: schemas.UserCreate):
     user = models.User(email=user_in.email, full_name=user_in.full_name)
     db.add(user)
     await db.flush()
     return user
 
-async def get_user(db, user_id: int):
+async def get_user(db: AsyncSession, user_id: int):
     q = await db.execute(select(models.User).where(models.User.id == user_id))
     return q.scalars().first()
 
-async def create_admin(db, admin_in: schemas.AdminCreate):
+async def create_admin(db: AsyncSession, admin_in: schemas.AdminCreate):
     admin = models.Admin(email=admin_in.email, full_name=admin_in.full_name)
     db.add(admin)
     await db.flush()
     return admin
 
-async def create_account(db, account_in: schemas.AccountCreate):
+async def create_account(db: AsyncSession, account_in: schemas.AccountCreate):
     account = models.Account(user_id=account_in.user_id, balance=Decimal("0.00"))
     db.add(account)
     await db.flush()
     return account
 
-async def get_account(db, account_id: int):
+async def get_account(db: AsyncSession, account_id: int):
     q = await db.execute(select(models.Account).where(models.Account.id == account_id))
     return q.scalars().first()
 
-async def create_payment_and_apply(db, payment_in: schemas.PaymentCreate):
+async def create_payment_and_apply(db: AsyncSession, payment_in: schemas.PaymentCreate):
     payment = models.Payment(uid=payment_in.uid, account_id=payment_in.account_id, amount=payment_in.amount)
     db.add(payment)
     try:
@@ -155,3 +156,43 @@ async def create_payment_if_not_exists(db: AsyncSession, transaction_id: str, us
     await db.refresh(payment)
     await db.refresh(acc)
     return payment, True
+
+async def create_test_entities(db: AsyncSession):
+    q = await db.execute(select(models.User).where(models.User.email == "test_user@example.com"))
+    user = q.scalars().first()
+    if not user:
+        user = models.User(
+            email="test_user@example.com",
+            full_name="Иван Иваныч",
+            password_hash=hash_password("123"),
+            is_admin=False,
+        )
+        db.add(user)
+        await db.flush()
+
+    # тестовый юзер
+    q = await db.execute(select(models.Account).where(models.Account.user_id == user.id))
+    account = q.scalars().first()
+    if not account:
+        account = models.Account(user_id=user.id, balance=Decimal("5000.00"))
+        db.add(account)
+        await db.flush()
+
+    # тестовый админ
+    q = await db.execute(select(models.User).where(models.User.email == "test_admin@example.com"))
+    admin = q.scalars().first()
+    if not admin:
+        admin = models.User(
+            email="test_admin@example.com",
+            full_name="Админ Дима",
+            password_hash=hash_password("456"), 
+            is_admin=True,
+        )
+        db.add(admin)
+        await db.flush()
+
+    await db.commit()
+    await db.refresh(user)
+    await db.refresh(account)
+    await db.refresh(admin)
+    return {"user_id": user.id, "account_id": account.id, "admin_id": admin.id}

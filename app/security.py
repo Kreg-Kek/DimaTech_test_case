@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from jose import jwt
 from typing import Optional
 import os
+import logging
 
 PWD_CTX = CryptContext(schemes=["bcrypt"], deprecated="auto")
 JWT_SECRET = os.getenv("JWT_SECRET", "change-me")
