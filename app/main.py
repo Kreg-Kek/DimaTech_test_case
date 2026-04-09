@@ -11,14 +11,9 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 from app import crud
 from app.async_log import init_logger
-from app.routers import users, admins, accounts, payments, auth
+from app.routers import users, admins, accounts, payments, auth, webhook
 from app.database import get_session, create_database
-from os import getenv
-from dotenv import load_dotenv
 
-load_dotenv()
-
-ACCESS_TOKEN=getenv('ACCESS_TOKEN')
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -38,6 +33,7 @@ app.include_router(users.router)
 app.include_router(admins.router)
 app.include_router(accounts.router)
 app.include_router(payments.router)
+app.include_router(webhook.router)
 
 
 

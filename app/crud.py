@@ -31,11 +31,10 @@ async def get_account(db, account_id: int):
     return q.scalars().first()
 
 async def create_payment_and_apply(db, payment_in: schemas.PaymentCreate):
-    # Atomically create payment and update account balance
     payment = models.Payment(uid=payment_in.uid, account_id=payment_in.account_id, amount=payment_in.amount)
     db.add(payment)
     try:
-        await db.flush()  # may raise IntegrityError on duplicate uid
+        await db.flush()
     except IntegrityError:
         await db.rollback()
         raise
@@ -49,14 +48,12 @@ async def create_payment_and_apply(db, payment_in: schemas.PaymentCreate):
     await db.flush()
     return payment
 
-# --- users/admin helpers ---
 async def get_user_by_email(db: AsyncSession, email: str):
     q = await db.execute(select(models.User).where(models.User.email == email))
     return q.scalars().first()
 
 async def create_user(db: AsyncSession, user_in: schemas.UserCreate):
     user = models.User(email=user_in.email, full_name=user_in.full_name, password_hash=user_in.password, is_admin=False)
-    # password_hash should be already hashed by caller
     db.add(user)
     await db.flush()
     return user
@@ -85,7 +82,6 @@ async def list_users(db: AsyncSession, limit: int=100, offset: int=0):
     q = await db.execute(select(models.User).limit(limit).offset(offset))
     return q.scalars().all()
 
-# accounts/payments by user
 async def get_accounts_by_user(db: AsyncSession, user_id: int):
     q = await db.execute(select(models.Account).where(models.Account.user_id == user_id))
     return q.scalars().all()
@@ -96,7 +92,6 @@ async def get_payments_by_user(db: AsyncSession, user_id: int):
     )
     return q.scalars().all()
 
-# authentication helper: check credentials
 async def authenticate_user(db: AsyncSession, email: str, plain_password: str, verify_fn):
     user = await get_user_by_email(db, email)
     if not user:
@@ -112,7 +107,51 @@ async def authenticate_user(db: AsyncSession, email: str, plain_password: str, v
         return {"type": "user", "obj": user}
     return None
 
-# helper to get accounts with balances for many users (admin requirement)
 async def get_accounts_for_users(db: AsyncSession, user_ids: list[int]):
     q = await db.execute(select(models.Account).where(models.Account.user_id.in_(user_ids)))
     return q.scalars().all()
+
+async def get_or_create_account(db: AsyncSession, owner_id: int, account_id: int | None = None):
+    if account_id is not None:
+        q = await db.execute(select(models.Account).where(models.Account.id == account_id, models.Account.user_id == owner_id))
+        acc = q.scalars().first()
+        if acc:
+            return acc
+
+    acc = models.Account(user_id=owner_id, balance=Decimal("0.00"))
+    db.add(acc)
+    await db.flush()
+    return acc
+
+async def create_payment_if_not_exists(db: AsyncSession, transaction_id: str, user_id: int, account_id: int, amount: Decimal):
+    q = await db.execute(select(models.Payment).where(models.Payment.uid == transaction_id))
+    existing = q.scalars().first()
+    if existing:
+        return existing, False
+
+    q2 = await db.execute(select(models.Account).where(models.Account.id == account_id, models.Account.user_id == user_id).with_for_update())
+    acc = q2.scalars().first()
+    if acc is None:
+        acc = models.Account(user_id=user_id, balance=Decimal("0.00"))
+        db.add(acc)
+        await db.flush()
+
+    payment = models.Payment(uid=transaction_id, account_id=acc.id, amount=Decimal(amount))
+    db.add(payment)
+    try:
+        await db.flush()
+    except IntegrityError:
+        await db.rollback()
+        q3 = await db.execute(select(models.Payment).where(models.Payment.uid == transaction_id))
+        existing = q3.scalars().first()
+        if existing:
+            return existing, False
+        raise
+
+    acc.balance = (acc.balance or Decimal("0.00")) + Decimal(amount)
+    db.add(acc)
+
+    await db.commit()
+    await db.refresh(payment)
+    await db.refresh(acc)
+    return payment, True

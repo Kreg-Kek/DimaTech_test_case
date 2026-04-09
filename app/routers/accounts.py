@@ -7,7 +7,6 @@ router = APIRouter(prefix="/accounts", tags=["accounts"])
 
 @router.post("/", response_model=schemas.AccountRead, status_code=status.HTTP_201_CREATED)
 async def create_account(account_in: schemas.AccountCreate, db: AsyncSession = Depends(get_session)):
-    # ensure user exists
     user = await crud.get_user(db, account_in.user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")

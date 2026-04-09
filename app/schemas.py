@@ -42,17 +42,6 @@ class PaymentRead(BaseModel):
     class Config:
         orm_mode = True
 
-class UserCreate(BaseModel):
-    email: EmailStr
-    full_name: Optional[str]
-
-class UserRead(BaseModel):
-    id: int
-    email: EmailStr
-    full_name: Optional[str]
-    class Config:
-        orm_mode = True
-
 class AdminCreate(BaseModel):
     email: EmailStr
     full_name: Optional[str]
@@ -67,22 +56,16 @@ class AdminRead(BaseModel):
 class AccountCreate(BaseModel):
     user_id: int
 
-class AccountRead(BaseModel):
-    id: int
-    user_id: int
-    balance: Annotated[Decimal, Field(max_digits=18, decimal_places=2)]
-    class Config:
-        orm_mode = True
+
 
 class PaymentCreate(BaseModel):
     uid: str
     account_id: int
-    amount: Annotated[Decimal, Field(max_digits=18, decimal_places=2)]
+    amount: Decimal
 
-class PaymentRead(BaseModel):
-    id: int
-    uid: str
+class WebhookPayload(BaseModel):
+    transaction_id: str
     account_id: int
-    amount: Annotated[Decimal, Field(max_digits=18, decimal_places=2)]
-    class Config:
-        orm_mode = True
+    user_id: int
+    amount: Decimal
+    signature: str

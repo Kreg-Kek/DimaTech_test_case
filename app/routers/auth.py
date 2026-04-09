@@ -20,7 +20,7 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
         token = create_access_token(subject=subject, is_admin=False)
     return {"access_token": token, "token_type": "bearer"}
 
-# optional: user self-registration (admin can also create)
+
 @router.post("/register", response_model=schemas.UserRead, status_code=status.HTTP_201_CREATED)
 async def register_user(user_in: schemas.UserCreate, db: AsyncSession = Depends(get_session)):
     existing = await crud.get_user_by_email(db, user_in.email)
