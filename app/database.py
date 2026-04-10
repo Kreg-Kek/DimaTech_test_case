@@ -41,7 +41,7 @@ async def create_database() -> None:
     """Create tables."""
 
     async with engine.begin() as db_engine:
-        # await db_engine.run_sync(Base.metadata.drop_all) #Строка для пересоздания таблиц
+        await db_engine.run_sync(Base.metadata.drop_all) #Строка для пересоздания таблиц
         await db_engine.run_sync(Base.metadata.create_all)
 
 
