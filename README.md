@@ -23,3 +23,4 @@ test_admin@example.com
 123
 
 Ссылка на сваггер: http://localhost:8080/docs
+для теста эндпоинтов и авторизации
